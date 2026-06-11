@@ -1,0 +1,71 @@
+#!/bin/sh
+# USB Camera Service — mjpg-streamer
+
+#moonraker.conf webcam exemple
+#[webcam Camera]
+#location: printer
+#enabled: True
+#service: mjpegstreamer-adaptive
+#target_fps: 15
+#stream_url: http://PRINTER_IP:9000/?action=stream
+#snapshot_url: http://PRINTER_IP:9000/?action=snapshot
+
+
+PIDFILE=/var/run/mjpg_streamer.pid
+
+MJPG="/usr/data/mjpg-streamer/bin/mjpg_streamer"
+LIBDIR="/usr/data/mjpg-streamer/lib/mjpg-streamer"
+
+export LD_LIBRARY_PATH=/usr/data/mjpg-streamer/lib/:$LIBDIR
+
+case "$1" in
+  start)
+    echo "Starting USB camera..."
+
+    killall -q mjpg_streamer
+    killall -q go2rtc
+
+    sleep 1
+
+    nice -n 15 "$MJPG" \
+      -i "$LIBDIR/input_uvc.so -d /dev/video4 -r 1280x720 -f 15" \
+      -o "$LIBDIR/output_http.so -p 9000" \
+      >/tmp/mjpg-streamer.log 2>&1 &
+
+    echo $! > "$PIDFILE"
+    ;;
+
+  stop)
+    echo "Stopping USB camera..."
+
+    if [ -f "$PIDFILE" ]; then
+      kill "$(cat "$PIDFILE")" 2>/dev/null
+      rm -f "$PIDFILE"
+    fi
+
+    killall -q mjpg_streamer
+    ;;
+
+  restart|reload)
+    "$0" stop
+    sleep 1
+    "$0" start
+    ;;
+
+  status)
+    if pidof mjpg_streamer >/dev/null; then
+      echo "mjpg_streamer running"
+      exit 0
+    fi
+
+    echo "mjpg_streamer stopped"
+    exit 1
+    ;;
+
+  *)
+    echo "Usage: $0 {start|stop|restart|status}"
+    exit 1
+    ;;
+esac
+
+exit 0
